@@ -1,3 +1,4 @@
+using EFCoreSample.WebAPI.Core;
 using EFCoreSample.WebAPI.Data;
 using EFCoreSample.WebAPI.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -10,19 +11,19 @@ namespace EFCoreSample.WebAPI.Controllers;
 public class EmployeeController : ControllerBase
 {
     ILogger<EmployeeController> _logger;
-    readonly ApiDbContext _dbContext;
+    readonly IUnitOfWork _unitOfWork;
     
-    public EmployeeController(ILogger<EmployeeController> logger, ApiDbContext dbContext)
+    public EmployeeController(ILogger<EmployeeController> logger, IUnitOfWork unitOfWork)
     {
         _logger = logger;
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
     }
 
     [HttpGet]
     [ProducesResponseType(200, Type = typeof(IEnumerable<Employee>))]
     public async Task<IActionResult> GetAsync()
     {
-        return Ok(await _dbContext.Employees.ToListAsync());
+        return Ok(await _unitOfWork.Employees.GetAll());
     }
 
     [HttpGet("{employeeId}")]
@@ -30,7 +31,7 @@ public class EmployeeController : ControllerBase
     [ProducesResponseType(404)]
     public async Task<IActionResult> GetById(int employeeId)
     {
-        Employee? employee = await _dbContext.Employees.FirstOrDefaultAsync(e => e.EmployeeId == employeeId);
+        Employee? employee = await _unitOfWork.Employees.GetById(employeeId);
 
         if (employee is null)
             return NotFound();
@@ -45,8 +46,8 @@ public class EmployeeController : ControllerBase
         if (employee is null)
             return BadRequest();
 
-        _dbContext.Employees.Add(employee);
-        await _dbContext.SaveChangesAsync();
+        await _unitOfWork.Employees.Add(employee);
+        await _unitOfWork.CompleteAsync();
 
         return Ok();
     }
@@ -56,12 +57,12 @@ public class EmployeeController : ControllerBase
     [ProducesResponseType(404)]
     public async Task<IActionResult> DeleteEmployee(int employeeId)
     {
-        Employee? employee = await _dbContext.Employees.FirstOrDefaultAsync(e => e.EmployeeId == employeeId);
+        Employee? employee = await _unitOfWork.Employees.GetById(employeeId);
         if (employee is null)
             return NotFound();
 
-        _dbContext.Employees.Remove(employee);
-        await _dbContext.SaveChangesAsync();
+        await _unitOfWork.Employees.Delete(employee);
+        await _unitOfWork.CompleteAsync();
 
         return NoContent();
     }
@@ -71,14 +72,15 @@ public class EmployeeController : ControllerBase
     [ProducesResponseType(404)]
     public async Task<IActionResult> UpdateEmployee(Employee employee)
     {
-        Employee? existingEmployee = await _dbContext.Employees.FirstOrDefaultAsync(e => e.EmployeeId == employee.EmployeeId);
+        Employee? existingEmployee = await _unitOfWork.Employees.GetById(employee.EmployeeId);
          if (existingEmployee is null)
             return NotFound();
         
         existingEmployee.Name = employee.Name;
         existingEmployee.Department = employee.Department;
 
-        await _dbContext.SaveChangesAsync();
+        await _unitOfWork.Employees.Update(existingEmployee);
+        await _unitOfWork.CompleteAsync();
 
         return NoContent();
     }
